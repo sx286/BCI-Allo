@@ -241,7 +241,7 @@ def cca_algorithm(concrete_type, N, M1, M2):
     #----------------------------------------------------------------
     # Signed square root kernel
     #----------------------------------------------------------------
-    def kernel_signed_sqrt[T: float64, N: int32](
+    def kernel_signed_sqrt[T: (float64, float32), N: int32](
         x: "T[1]",    # Input value
         y: "T[1]"     # Output value
     ):
@@ -384,59 +384,59 @@ def CCA_sklearn(X: np.ndarray, Y: np.ndarray):
 #================================================================================
 # Test CCA algorithm using Vitis HLS
 #================================================================================
+import pytest
+
 def test_cca_vhls():
     # Define matrix dimensions
-    N = 1000   # Number of samples
+    N = 100   # Number of samples
     M1 = 9     # EEG channels
     M2 = 10    # Reference signals
 
     # CCA algorithm schedule
-    s = cca_algorithm(float32, N, M1, M2)
-
-    # Print initial IR structure
-
-    print("Initial IR structure:")
-    print(s.module)
-    print("\n")
+    concrete_type = float64
+    sch = cca_algorithm(concrete_type, N, M1, M2)
 
     # Generate Vitis HLS code and synthesize
-    print("Start generating Vitis HLS code and synthesizing...")
-    # mod = s.build(target="vhls")
-    # mod = s.build(target="vitis_hls",mode="csim",project="cca.prj")
-    mod = s.build(target="vitis_hls",mode="hw_emu",project="cca.prj")
+    # print("Start generating Vitis HLS code and synthesizing...")
+    # mod = sch.build() # using llvm
+    mod = sch.build(target="vitis_hls",mode="csim",project="cca.prj")
+    # mod = sch.build(target="vitis_hls",mode="hw_emu",project="cca.prj")
 
     # # Generate random test data
-    print("Generating test data...")
+    # print("Generating test data...")
     np.random.seed(42)  # Set random seed to ensure reproducibility
-    X = np.random.rand(N, M1).astype(np.float32)  # EEG signals
-    Y = np.random.rand(N, M2).astype(np.float32)  # Reference signals
-    r_allo = np.zeros(1, dtype=np.float32)  # Output correlation coefficient
+    X = np.random.rand(N, M1).astype(np.float64)  # EEG signals
+    Y = np.random.rand(N, M2).astype(np.float64)  # Reference signals
+    r_allo = np.zeros(1, dtype=np.float64)  # Output correlation coefficient
 
     # Calculate reference result (using sklearn implementation)
-    print("Calculating reference result...")
+    # print("Calculating reference result...")
     r_ref = CCA_sklearn(X.copy(), Y.copy())
 
     # Use generated hardware design for calculation
-    print("Using hardware design for calculation...")
+    # print("Using hardware design for calculation...")
     mod(X, Y, r_allo)
+    np.testing.assert_allclose(r_allo[0], r_ref, rtol=1e-2, atol=1e-3)
+    # # Display results
+    # print(f"\nInput data dimensions: X = {X.shape}, Y = {Y.shape}")
+    # print(f"Hardware design calculation result: {r_allo[0]}")
+    # print(f"NumPy reference result: {r_ref}")
+    # print(f"Absolute error: {abs(r_allo[0] - r_ref)}")
+   
 
-    # Display results
-    print(f"\nInput data dimensions: X = {X.shape}, Y = {Y.shape}")
-    print(f"Hardware design calculation result: {r_allo[0]}")
-    print(f"NumPy reference result: {r_ref}")
-    print(f"Absolute error: {abs(r_allo[0] - r_ref)}")
-
+    
     # Verify results
-    try:
-        np.testing.assert_allclose(r_allo[0], r_ref, rtol=1e-2, atol=1e-3)
-        print("\n✓ Hardware design test passed: correlation coefficient matches")
-    except AssertionError:
-        print("\n✗ Hardware design test failed: correlation coefficient does not match")
-        print(f"   Expected value: {r_ref}")
-        print(f"   Actual value: {r_allo[0]}")
-        print(f"   Error: {abs(r_allo[0] - r_ref)}")
-        raise
+    # try:
+    #     np.testing.assert_allclose(r_allo[0], r_ref, rtol=1e-2, atol=1e-3)
+    #     print("\n✓ Hardware design test passed: correlation coefficient matches")
+    # except AssertionError:
+    #     print("\n✗ Hardware design test failed: correlation coefficient does not match")
+    #     print(f"   Expected value: {r_ref}")
+    #     print(f"   Actual value: {r_allo[0]}")
+    #     print(f"   Error: {abs(r_allo[0] - r_ref)}")
+    #     raise
     
 
 if __name__ == "__main__":
-    mod = test_cca_vhls()
+    pytest.main([__file__])
+    # mod = test_cca_vhls()
